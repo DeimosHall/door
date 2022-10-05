@@ -287,6 +287,24 @@ void stopDoor() {
 	HAL_GPIO_WritePin(motor_driver_2_GPIO_Port, motor_driver_2_Pin, 0);
 }
 
+uint32_t listenClick(GPIO_TypeDef *port, uint16_t pin) {
+	static char ones = 0, zeros = 0;
+
+	if(HAL_GPIO_ReadPin(port, pin) == 1) {
+		zeros = 0;
+		ones++;
+	} else {
+		zeros++;
+		ones = 0;
+	}
+
+	if(ones == 3) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 void avoidBounds() {
 	static char zeros_closed_door = 0, ones_closed_door = 0;
 	static char zeros_opened_door = 0, ones_opened_door = 0;
@@ -299,7 +317,7 @@ void avoidBounds() {
 		ones_closed_door++;
 
 		// button pressed just when there are at least 30 ms
-		if (ones_btn_close = 3) {
+		if (ones_btn_close == 3) {
 			closed_door_pressed = 1;
 		} else if(zeros_btn_close = 3) {
 			closed_door_pressed = 0;
@@ -313,7 +331,7 @@ void avoidBounds() {
 		zeros_opened_door = 0;
 		ones_opened_door++;
 
-		if (ones_btn_close = 3) {
+		if (ones_btn_close == 3) {
 			btn_close_pressed = 1;
 		} else if(zeros_btn_close = 3) {
 			btn_close_pressed = 0;
@@ -327,7 +345,7 @@ void avoidBounds() {
 		zeros_btn_close = 0;
 		ones_btn_close++;
 
-		if (ones_btn_close = 3) {
+		if (ones_btn_close == 3) {
 			btn_close_pressed = 1;
 		} else if(zeros_btn_close = 3) {
 			btn_close_pressed = 0;
@@ -341,7 +359,7 @@ void avoidBounds() {
 		zeros_btn_open = 0;
 		ones_btn_open++;
 
-		if (ones_btn_close = 3) {
+		if (ones_btn_close == 3) {
 			btn_open_pressed = 1;
 		} else if(zeros_btn_close = 3) {
 			btn_open_pressed = 0;
