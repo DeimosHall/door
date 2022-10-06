@@ -42,6 +42,7 @@
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
+// volatile is to tell the compiler do not optimized this code, do not delete it
 volatile char flag = 0, btn_open_pressed = 0, btn_close_pressed = 0;
 volatile char opened_door_pressed = 0, closed_door_pressed = 0;
 /* USER CODE END PV */
@@ -55,7 +56,10 @@ void doorTask();
 void closeDoor();
 void openDoor();
 void stopDoor();
-void avoidBounds();
+void listenClick();
+void turnOnUserLed();
+void turnOffUserLed();
+void checkButton();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -98,13 +102,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  turnOffUserLed();
+
   while (1) {
 
 	  doorTask();
-	  avoidBounds();
+	  listenClick();
+	  checkButton();
+
+	  //btn_open_pressed = listenClick(btn_open_GPIO_Port, btn_open_Pin);
 
 	  //while(0==flag);
-	  flag=0;
+	  //flag=0;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -206,12 +215,23 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(user_led_GPIO_Port, user_led_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, motor_driver_1_Pin|motor_driver_2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : user_led_Pin */
+  GPIO_InitStruct.Pin = user_led_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(user_led_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : motor_driver_1_Pin motor_driver_2_Pin */
   GPIO_InitStruct.Pin = motor_driver_1_Pin|motor_driver_2_Pin;
@@ -258,9 +278,12 @@ void doorTask() {
 			break;
 		// Door opened
 		case 2:
+			stopDoor();
+
 			if (btn_close_pressed == 1) {
 				stage = 3;
 			}
+			break;
 		// Closing door
 		case 3:
 			closeDoor();
@@ -268,6 +291,7 @@ void doorTask() {
 			if (closed_door_pressed == 1) {
 				stage = 0;
 			}
+			break;
 		}
 		tenMilis++;
 }
@@ -287,102 +311,93 @@ void stopDoor() {
 	HAL_GPIO_WritePin(motor_driver_2_GPIO_Port, motor_driver_2_Pin, 0);
 }
 
-uint32_t listenClick(GPIO_TypeDef *port, uint16_t pin) {
-	static char ones = 0, zeros = 0;
-
-	if(HAL_GPIO_ReadPin(port, pin) == 1) {
-		zeros = 0;
-		ones++;
-	} else {
-		zeros++;
-		ones = 0;
-	}
-
-	if(ones == 3) {
-		return 1;
-	} else {
-		return 0;
-	}
-}
-
-void avoidBounds() {
+void listenClick() {
 	static char zeros_closed_door = 0, ones_closed_door = 0;
 	static char zeros_opened_door = 0, ones_opened_door = 0;
 	static char zeros_btn_open = 0, ones_btn_open = 0;
 	static char zeros_btn_close = 0, ones_btn_close = 0;
-	static char stage = 0;
 
+	// Debouncing filter for closed_door
 	if (HAL_GPIO_ReadPin(closed_door_GPIO_Port, closed_door_Pin) == 1) {
 		zeros_closed_door = 0;
 		ones_closed_door++;
-
-		// button pressed just when there are at least 30 ms
-		if (ones_btn_close == 3) {
-			closed_door_pressed = 1;
-		} else if(zeros_btn_close = 3) {
-			closed_door_pressed = 0;
-		}
 	} else {
 		zeros_closed_door++;
 		ones_closed_door = 0;
 	}
 
+	// button pressed just when there are at least 30 ms
+	if (ones_closed_door == 3) {
+		closed_door_pressed = 1;
+	} else if(zeros_closed_door == 3) {
+		closed_door_pressed = 0;
+	}
+
+	// Debouncing filter for opened_door
 	if (HAL_GPIO_ReadPin(opened_door_GPIO_Port, opened_door_Pin) == 1) {
 		zeros_opened_door = 0;
 		ones_opened_door++;
-
-		if (ones_btn_close == 3) {
-			btn_close_pressed = 1;
-		} else if(zeros_btn_close = 3) {
-			btn_close_pressed = 0;
-		}
 	} else {
 		zeros_opened_door++;
 		ones_opened_door = 0;
 	}
 
+	if (ones_opened_door == 3) {
+		opened_door_pressed = 1;
+	} else if(zeros_opened_door == 3) {
+		opened_door_pressed = 0;
+	}
+
+	// Debouncing filter for btn_close
 	if (HAL_GPIO_ReadPin(btn_close_GPIO_Port, btn_close_Pin) == 1) {
 		zeros_btn_close = 0;
 		ones_btn_close++;
-
-		if (ones_btn_close == 3) {
-			btn_close_pressed = 1;
-		} else if(zeros_btn_close = 3) {
-			btn_close_pressed = 0;
-		}
 	} else {
 		zeros_btn_close++;
 		ones_btn_close = 0;
 	}
 
+	if (ones_btn_close == 3) {
+		btn_close_pressed = 1;
+	} else if(zeros_btn_close == 3) {
+		btn_close_pressed = 0;
+	}
+
+	// Debouncing filter for btn_open
 	if (HAL_GPIO_ReadPin(btn_open_GPIO_Port, btn_open_Pin) == 1) {
 		zeros_btn_open = 0;
 		ones_btn_open++;
-
-		if (ones_btn_close == 3) {
-			btn_open_pressed = 1;
-		} else if(zeros_btn_close = 3) {
-			btn_open_pressed = 0;
-		}
 	} else {
 		zeros_btn_open++;
 		ones_btn_open = 0;
 	}
 
-	/*
-	switch(stage){
-		case 0://espera a detectar un nivel alto estable
-		   if(ones_opened_door == 3) {
-			   stage = 0;
-		   }
-		   break;
-		case 1://espera a detectar un nivel bajo estable
-		   if(3==zeros_btn_close) {
-			   etapa=0;
-		   }
-		   break;
-	} */
+	if (ones_btn_open == 3) {
+		btn_open_pressed = 1;
+	} else if(zeros_btn_open == 3) {
+		btn_open_pressed = 0;
+	}
 
+}
+
+void turnOnUserLed() {
+	HAL_GPIO_WritePin(user_led_GPIO_Port, user_led_Pin, 0);
+}
+
+void turnOffUserLed() {
+	HAL_GPIO_WritePin(user_led_GPIO_Port, user_led_Pin, 1);
+}
+
+/*
+ * checkButton() just turn led user on when any button is pressed
+ */
+void checkButton() {
+	if(btn_open_pressed == 1 || btn_close_pressed == 1 || opened_door_pressed == 1
+		  || closed_door_pressed == 1) {
+	  turnOnUserLed();
+  } else {
+	  turnOffUserLed();
+  }
 }
 /* USER CODE END 4 */
 
